@@ -1731,11 +1731,7 @@ fun drawArea c =
                 val ((_,pts2,_,_),_) = convertArea p2;
             in (([], pts1 @ pts2, [], []), []) end
           | convertArea (OVERLAY(id, area, rect, tag, shading)) =
-                let fun flipShading x = case x of
-                                            BLUE => RED
-                                          | RED => BLUE
-                                          | _ => x;
-                    val ((v1, p1, s1, w1), html) = convertArea area;
+                let val ((v1, p1, s1, w1), html) = convertArea area;
                     val (( _, p2,  _,  _),    _) = convertArea rect;
                     val ((v3,  _,  _,  _),    _) = convertArea tag;
                 in if w1 = []
@@ -1752,7 +1748,7 @@ fun drawArea c =
                                                     (_::_::p::_) => ([MINUS(ONE, p), ZERO, ONE, ONE],
                                                                      [MINUS(ONE, p), p])
                                                   | _ => raise AreaError;
-                                          val shading = [flipShading shading];
+                                          val shading = [shading];
                                       in ((    v3, points, shading, probs),
                                           (id, v3, points, shading, probs) :: html)
                                       end
@@ -1771,16 +1767,16 @@ fun drawArea c =
                             let val events = v1 @ v3;
                                 val (points, probs) =
                                     case p2 of
-                                        (p::_::_::q::_) => (p1 @ [p, MINUS(ONE, q), q, ONE],
-                                                            w1 @ [MINUS(ONE, q), q])
+                                        (p::_::q::r::_) => (p1 @ [p, MINUS(ONE, r), q, ONE],
+                                                            w1 @ [MINUS(ONE, r), r])
                                      | _ => raise AreaError;
-                                val shading = s1 @ [flipShading shading];
+                                val shading = s1 @ [shading];
                             in ((    events, points, shading, probs),
                                 (id, events, points, shading, probs) :: html)
                             end
                           | (NEVENT _, SEVENT _) =>
                             let val events = v1 @ v3;
-                                val points = p1 @ [List.nth(p1,0),List.nth(p2,1),List.nth(p1,2),List.nth(p2,3)];
+                                val points = p1 @ [List.nth(p1,0),List.nth(p1,1),List.nth(p1,2),List.nth(p2,3)];
                                 val shading = s1 @ [shading];
                                 val probs = w1 @ [List.nth(p2,3),MINUS(ONE,List.nth(p2,3))];
                             in ((    events, points, shading, probs),
@@ -1788,8 +1784,8 @@ fun drawArea c =
                             end
                           | (NEVENT _, NEVENT _) =>
                             let val events = v1 @ v3;
-                                val points = p1 @ [List.nth(p1,0),MINUS(ONE,List.nth(p2,3)),List.nth(p1,2),ONE];
-                                val shading = s1 @ [flipShading shading];
+                                val points = p1 @ [List.nth(p1,0),MINUS(ONE,List.nth(p2,3)),List.nth(p1,2),List.nth(p1,3)];
+                                val shading = s1 @ [shading];
                                 val probs = w1 @ [MINUS(ONE,List.nth(p2,3)), List.nth(p2,3)];
                             in ((    events, points, shading, probs),
                                 (id, events, points, shading, probs) :: html)
@@ -1797,18 +1793,16 @@ fun drawArea c =
                 end
             | convertArea (COMBAREA(id, x, y)) =
               let fun toRects [w0, _, w2, _, w4, _] =
-                      let val z = ZERO;
-                          val i = ONE;
-                      in [z, z, w0, i,
-                          z, z, w0, w2,
-                          w0, z, i, w4] end
+                              [ZERO, ZERO, w0,  ONE,
+                               ZERO, ZERO, w0,  w2,
+                               w0,   ZERO, ONE, w4]
                     | toRects _ = raise AreaError;
                   fun mergeShading PATTERN y = y
                     | mergeShading x PATTERN = x
                     | mergeShading WHITE y = y
                     | mergeShading x _ = x
-                  fun extractNum [] y w = if List.length w = 6 then w else raise AreaError (*remove y*)
-                    | extractNum (x::xs) y w =
+                  fun extractNum [] w = if List.length w = 6 then w else raise AreaError
+                    | extractNum (x::xs) w =
                       if xs = [] then w@[U, U, U, U]
                       else if List.length w = 6 then w
                       else case x of
@@ -1884,20 +1878,16 @@ fun drawArea c =
                       end;
                   val ((x2,y2,z2,w2),n1) = convertArea x;
                   val ((x3,y3,z3,w3),n2) = convertArea y;
-                  val (x, c, d, e, f) = areaMerge x2 y2 (extractNum x2 y2 w2) x3 y3 (extractNum x3 y3 w3);
-                  val g = resolve (c@e) (d@f) (List.length c);
-              in if List.length g = 12
-                 then let val (pre, post) = List.split (g, 4);
-                          val shading = mergeShading (hd z2) (hd z3);
-                      in ((    x, post, [shading, PATTERN], pre),
-                          (id, x, post, [shading, PATTERN], pre) :: n1 @ n2)
-                      end
-                 else let val pre = List.take (g, 6);
-                          val rects = toRects pre;
-                          val shading = [WHITE, BLUE, RED];
-                      in ((    x, rects, shading, pre),
-                          (id, x, rects, shading, pre) :: n1 @ n2)
-                      end
+                  val (x, c, d, e, f) = areaMerge x2 y2 (extractNum x2 w2) x3 y3 (extractNum x3 w3);
+                  val cLen = List.length c
+                  val g = resolve (c@e) (d@f) cLen;
+                  val (pre,post) = List.split(g, cLen);
+                  val shading = if cLen = 6 then [WHITE, BLUE, RED]
+                                else if cLen = 2 then [mergeShading (hd z2) (hd z3)]
+                                else [(mergeShading (hd z2) (hd z3)), PATTERN]
+                  val rects = if cLen = 6 then toRects pre else post;
+                in ((    x, rects, shading, pre),
+                    (id, x, rects, shading, pre) :: n1 @ n2)
               end;
         fun areaToHTML (id, events, b, fills, d) =
             let fun toNum x = if onlyNum x
@@ -1943,7 +1933,6 @@ fun drawArea c =
                            in String.concat [
                                    bg, "\n",
                                    (rect (width, height) translate fill), "\n",
-                                   id, (* We emit the token ID, not sure why... *)
                                    (text (mid, "10") event1), "\n",
                                    (text (mid, "25") (numToString w0)), "\n"
                                ] end
@@ -1964,7 +1953,6 @@ fun drawArea c =
                                    bg, "\n",
                                    (rect (width1, height1) translate1 fill1), "\n",
                                    (rect (width2, height2) translate2 fill2), "\n",
-                                   id,
                                    (text (mid, "10") event1), "\n",
                                    (text (mid, "25") (numToString w0)), "\n",
                                    (text (lab, (mid2 22)) event2), "\n",
@@ -1989,7 +1977,6 @@ fun drawArea c =
                                    (rect (width1, height1) translate1 fill1), "\n",
                                    (rect (width2, height2) translate2 fill2), "\n",
                                    (rect (width3, height3) translate3 fill3), "\n",
-                                   id,
                                    (text (mid w0 30, "10") event1), "\n",
                                    (text (mid w0 30, "25") (numToString w0)), "\n",
                                    (text ("15", mid w2 22) event2), "\n",
