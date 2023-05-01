@@ -889,24 +889,25 @@ fun resolve a b (n:int) =
               | (MINUS(VAR(n), c), y) => SOME (VAR(n), PLUS(c, y))
               | (x, MINUS(VAR(n), c)) => SOME (VAR(n), PLUS(c, x))
               | _ => NONE;
-        fun filterNum xs ys nx ny =
-            let fun filterNum' ans [] [] = List.rev ans
-                  | filterNum' ans [] ys = (List.rev ans)@ys
-                  | filterNum' ans xs [] = (List.rev ans)@xs
-                  | filterNum' ans (x::xs) (y::ys) =
+        fun filterNum xs ys nx ny n =
+            let fun filterNum' ans xs ys 0 = if nx > ny then (List.rev ans)@ys else (List.rev ans)@xs
+                  | filterNum' ans [] [] _ = List.rev ans
+                  | filterNum' ans [] ys _ = (List.rev ans)@ys
+                  | filterNum' ans xs [] _ = (List.rev ans)@xs
+                  | filterNum' ans (x::xs) (y::ys) n =
                     let val xn = convertNum x
                         val yn = convertNum y
                     in case (xn, yn) of
                         (R xn, R yn) => if numToString x = numToString y
-                                        then filterNum' (x::ans) xs ys 
+                                        then filterNum' (x::ans) xs ys (n-1)
                                         else raise EqnContradictionError
-                      | (R _, V _)   => filterNum' (x::ans) xs ys
-                      | (V _, R _)   => filterNum' (y::ans) xs ys
-                      | (V xn, V yn) => if xn = "" then filterNum' (y::ans) xs ys
-                                        else if yn = "" then filterNum' (x::ans) xs ys
-                                        else if nx > ny then filterNum' (y::ans) xs ys
-                                        else filterNum' (x::ans) xs ys end;
-            in filterNum' [] xs ys end;
+                      | (R _, V _)   => filterNum' (x::ans) xs ys (n-1)
+                      | (V _, R _)   => filterNum' (y::ans) xs ys (n-1)
+                      | (V xn, V yn) => if xn = "" then filterNum' (y::ans) xs ys (n-1)
+                                        else if yn = "" then filterNum' (x::ans) xs ys (n-1)
+                                        else if nx > ny then filterNum' (y::ans) xs ys (n-1)
+                                        else filterNum' (x::ans) xs ys (n-1) end;
+            in filterNum' [] xs ys n end;
         fun tResolve a b c d 0 = (List.revAppend (c, a), List.revAppend (d, b))
           | tResolve [] [] c d _ = (List.rev c, List.rev d)
           | tResolve (a::aas) (b::bbs) c d e =
@@ -1654,7 +1655,7 @@ fun resolve a b (n:int) =
             end
           | tResolve _ _ _ _ _ = raise NumError;
         val (x, y) = tResolve a b [] [] n;
-    in filterNum x y (countU a) (countU b) end
+    in filterNum x y (countU a) (countU b) n end
 
 fun stringToHTML (id, "EMPTY", _) = (* NOT A STRING: This is an EMPTY area Diagram! *)
     (id, ("<div>\n"^
